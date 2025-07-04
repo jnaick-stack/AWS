@@ -1,0 +1,92 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "CloudWatch Logs with Lambda Trigger",
+    "Parameters": {
+      "LogGroupName": {
+        "Type": "String",
+        "Description": "Name for the CloudWatch Logs Group",
+        "Default": "MyLambdaLogs"
+      }
+    },
+    "Resources": {
+      "LambdaExecutionRole": {
+        "Type": "AWS::IAM::Role",
+        "Properties": {
+          "RoleName": "LambdaExecutionRole",
+          "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Service": "lambda.amazonaws.com"
+                },
+                "Action": "sts:AssumeRole"
+              }
+            ]
+          },
+          "Policies": [
+            {
+              "PolicyName": "CloudWatchLogsPolicy",
+              "PolicyDocument": {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": [
+                      "logs:CreateLogGroup",
+                      "logs:CreateLogStream",
+                      "logs:PutLogEvents"
+                    ],
+                    "Resource": "*"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "MyLambdaFunction": {
+        "Type": "AWS::Lambda::Function",
+        "Properties": {
+          "FunctionName": "MyLambdaFunction",
+          "Handler": "index.handler",
+          "Role": { "Fn::GetAtt": ["LambdaExecutionRole", "Arn"] },
+          "FunctionName": "my-lambda-function",
+          "Runtime": "nodejs14.x",
+          "Timeout": 10,
+          "MemorySize": 128
+        }
+      },
+      "LogGroup": {
+        "Type": "AWS::Logs::LogGroup",
+        "Properties": {
+          "LogGroupName": { "Ref": "LogGroupName" }
+        }
+      },
+      "LambdaLogGroupPermission": {
+        "Type": "AWS::Lambda::Permission",
+        "Properties": {
+          "Action": "lambda:InvokeFunction",
+          "FunctionName": { "Ref": "MyLambdaFunction" },
+          "Principal": "logs.amazonaws.com"
+        }
+      },
+      "LogStream": {
+        "Type": "AWS::Logs::LogStream",
+        "DependsOn": "LogGroup",
+        "Properties": {
+          "LogGroupName": { "Ref": "LogGroupName" }
+        }
+      },
+      "LogSubscriptionFilter": {
+        "Type": "AWS::Logs::SubscriptionFilter",
+        "DependsOn": "LambdaLogGroupPermission",
+        "Properties": {
+          "LogGroupName": { "Ref": "LogGroupName" },
+          "FilterPattern": "",
+          "DestinationArn": { "Fn::GetAtt": ["MyLambdaFunction", "Arn"] }
+        }
+      }
+    }
+  }
