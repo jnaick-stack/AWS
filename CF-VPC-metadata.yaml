@@ -1,0 +1,187 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create VPC with multiple CIDRs and associated subnets
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Network Configuration"
+        Parameters: 
+          - VpcName
+          - PrimarySubnetName01Cidr
+          - PrimarySubnetName01
+      - 
+        Label: 
+          default: "Amazon EC2 Configuration"
+        Parameters: 
+          - InstanceType
+          - KeyName
+    ParameterLabels: 
+      VPCID: 
+        default: "Which VPC should this be deployed to?"
+
+
+Parameters:
+  VpcName:
+    Type: String
+    Description: Enter VPC Name
+    Default: bop-vpc
+  PrimarySubnetName01:
+    Type: String
+    Description: The Name of Subnet with PrimarySubnetId01Cidr
+    Default: app-subnet-01
+  PrimarySubnetName01Cidr:
+    Type: String
+    Description: CidrBlock range with the PrimarySubnetName01
+    Default: 10.29.176.0/27
+  PrimarySubnetName02:
+    Type: String
+    Description: The Name of Subnet with PrimarySubnetName02Cidr
+    Default: app-subnet-02
+  PrimarySubnetName02Cidr:
+    Type: String
+    Description: CidrBlock range with the PrimarySubnetName02
+    Default: 10.29.176.32/27
+  TGWSubnetName01:
+    Type: String
+    Description: The Name of Subnet with TGWSubnetName01Cidr
+    Default: tgw-subnet-01
+  TGWSubnetName01Cidr:
+    Type: String
+    Description: CidrBlock range with the TGWSubnetName01
+    Default: 10.15.144.0/28
+  TGWSubnetName02:
+    Type: String
+    Description: The Name of Subnet with TGWSubnetName02Cidr
+    Default: tgw-subnet-02
+  TGWSubnetName02Cidr:
+    Type: String
+    Description: CidrBlock range with the TGWSubnetName02
+    Default: 10.15.144.16/28
+  VpcPrimaryCIDR:
+    Type: String
+    Description: Enter Primary CIDR for the VPC
+    Default: 10.29.176.0/26
+  VpcSecondaryCIDR:
+    Type: String
+    Description: Enter Secondary CIDR for the VPC
+    Default: 10.15.144.0/26
+  TransitGatewayAttachmentName:
+    Type: String
+    Description: Enter Name for Transit Gateway Attachment
+    Default: tgw-dev-qa-attach
+  TransitGatewayID:
+    Type: String
+    Description: Enter existing Transit Gateway ID available in the region
+  EC2ServiceName: 
+    Type: String
+    Description: The service name for the EC2 VPC endpoint
+    Default: "com.amazonaws.us-east-1.ec2"
+  SSMServiceName:
+    Type: String
+    Description: The service name for the SSM VPC endpoint
+    Default: "com.amazonaws.us-east-1.ssm"
+
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcPrimaryCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref VpcName
+
+  SecondaryCIDR:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref VpcSecondaryCIDR
+
+  # Subnets for 10.29.176.0/26 CIDR
+  Subnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PrimarySubnetName01Cidr
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: !Ref PrimarySubnetName01
+
+  Subnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PrimarySubnetName02Cidr
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: !Ref PrimarySubnetName02
+
+  # Subnets for 10.15.144.0/26 CIDR
+  Subnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref TGWSubnetName01Cidr
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: !Ref TGWSubnetName01
+
+  Subnet5:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref TGWSubnetName02Cidr
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: !Ref TGWSubnetName02
+
+  TransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      TransitGatewayId: !Ref TransitGatewayID
+      VpcId: !Ref Vpc
+      SubnetIds:
+        - !Ref Subnet4
+        - !Ref Subnet5
+      Tags:
+        - Key: Name
+          Value: !Ref TransitGatewayAttachmentName
+
+  EC2Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Interface
+      ServiceName: !Ref EC2ServiceName
+
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Interface
+      ServiceName: !Ref SSMServiceName
+
+Outputs:
+  VpcId:
+    Description: VPC ID
+    Value: !Ref Vpc
+
+  SubnetIds:
+    Description: Subnet IDs
+    Value: 
+      Fn::Join:
+        - ","
+        - - !Ref Subnet1
+          - !Ref Subnet2
+          - !Ref Subnet4
+          - !Ref Subnet5
+          - !Ref EC2Endpoint
+          - !Ref SSMEndpoint
